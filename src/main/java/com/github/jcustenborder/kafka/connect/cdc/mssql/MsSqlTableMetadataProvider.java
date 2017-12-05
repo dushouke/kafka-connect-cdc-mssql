@@ -42,26 +42,20 @@ import java.util.Map;
 import java.util.Set;
 
 class MsSqlTableMetadataProvider extends CachingTableMetadataProvider {
-  final static String OFFSET_SQL = "SELECT " +
-      "DB_NAME() AS [databaseName], " +
-      "SCHEMA_NAME(OBJECTPROPERTY(object_id, 'SchemaId')) AS [schemaName], " +
-      "OBJECT_NAME(object_id) AS [tableName], " +
-      "[min_valid_version], " +
-      "[begin_version] " +
-      "FROM " +
-      "[sys].[change_tracking_tables] " +
-      "WHERE " +
-      "SCHEMA_NAME(OBJECTPROPERTY(object_id, 'SchemaId')) = ? AND " +
-      "OBJECT_NAME(object_id) = ?";
+  final static String OFFSET_SQL = "SELECT " + "DB_NAME() AS [databaseName], "
+      + "SCHEMA_NAME(OBJECTPROPERTY(object_id, 'SchemaId')) AS [schemaName], "
+      + "OBJECT_NAME(object_id) AS [tableName], " + "[min_valid_version], " + "[begin_version] " + "FROM "
+      + "[sys].[change_tracking_tables] " + "WHERE " + "SCHEMA_NAME(OBJECTPROPERTY(object_id, 'SchemaId')) = ? AND "
+      + "OBJECT_NAME(object_id) = ?";
   private static Logger log = LoggerFactory.getLogger(MsSqlTableMetadataProvider.class);
-  final static String PRIMARY_KEY_SQL =
-      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE " +
-          "OBJECTPROPERTY(OBJECT_ID(CONSTRAINT_SCHEMA+'.'+CONSTRAINT_NAME), 'IsPrimaryKey') = 1 AND " +
-          "CONSTRAINT_SCHEMA = ? AND TABLE_NAME = ?";
-  final static String COLUMN_DEFINITION_SQL =
-      "SELECT column_name, iif(is_nullable='YES', 1, 0) AS is_optional, data_type, " +
-          "numeric_scale FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? " +
-          "ORDER BY ORDINAL_POSITION";
+  final static String PRIMARY_KEY_SQL = "SELECT Col.Column_Name FROM " + "INFORMATION_SCHEMA.TABLE_CONSTRAINTS Tab,  "
+      + "INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE Col  " + "WHERE  " + "Col.Constraint_Name = Tab.Constraint_Name "
+      + "AND Col.Table_Name = Tab.Table_Name " + "AND Col.CONSTRAINT_SCHEMA = Tab.CONSTRAINT_SCHEMA "
+      + "AND Tab.Constraint_Type = 'PRIMARY KEY' " + "AND Col.CONSTRAINT_SCHEMA = ? " + "AND Col.Table_Name = ? ";
+
+  final static String COLUMN_DEFINITION_SQL = "SELECT column_name, iif(is_nullable='YES', 1, 0) AS is_optional, data_type, "
+      + "numeric_scale FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? "
+      + "ORDER BY ORDINAL_POSITION";
 
   public MsSqlTableMetadataProvider(MsSqlSourceConnectorConfig config, OffsetStorageReader offsetStorageReader) {
     super(config, offsetStorageReader);
@@ -90,7 +84,8 @@ class MsSqlTableMetadataProvider extends CachingTableMetadataProvider {
       log.trace("{}: Querying for schema.", changeKey);
 
       Map<String, Schema> columnSchemas = new LinkedHashMap<>();
-      try (PreparedStatement columnDefinitionStatement = pooledConnection.getConnection().prepareStatement(COLUMN_DEFINITION_SQL)) {
+      try (PreparedStatement columnDefinitionStatement = pooledConnection.getConnection()
+          .prepareStatement(COLUMN_DEFINITION_SQL)) {
         columnDefinitionStatement.setString(1, changeKey.schemaName);
         columnDefinitionStatement.setString(2, changeKey.tableName);
         try (ResultSet resultSet = columnDefinitionStatement.executeQuery()) {
@@ -107,83 +102,82 @@ class MsSqlTableMetadataProvider extends CachingTableMetadataProvider {
     }
   }
 
-  Schema generateSchema(ResultSet resultSet,
-                        final ChangeKey changeKey,
-                        final String columnName) throws SQLException {
+  Schema generateSchema(ResultSet resultSet, final ChangeKey changeKey, final String columnName) throws SQLException {
     boolean optional = resultSet.getBoolean(2);
     String dataType = resultSet.getString(3);
     int scale = resultSet.getInt(4);
     SchemaBuilder builder;
 
-    log.trace("{}: columnName='{}' dataType='{}' scale={} optional={}", changeKey, columnName, dataType, scale, optional);
+    log.trace("{}: columnName='{}' dataType='{}' scale={} optional={}", changeKey, columnName, dataType, scale,
+        optional);
 
     switch (dataType) {
-      case "bigint":
-        builder = SchemaBuilder.int64();
-        break;
-      case "bit":
-        builder = SchemaBuilder.bool();
-        break;
-      case "char":
-      case "varchar":
-      case "text":
-      case "nchar":
-      case "nvarchar":
-      case "ntext":
-      case "uniqueidentifier":
-        builder = SchemaBuilder.string();
-        break;
-      case "smallmoney":
-      case "money":
-      case "decimal":
-      case "numeric":
-        builder = Decimal.builder(scale);
-        break;
-      case "binary":
-      case "image":
-      case "varbinary":
-        builder = SchemaBuilder.bytes();
-        break;
-      case "date":
-        builder = Date.builder();
-        break;
-      case "datetime":
-      case "datetime2":
-      case "smalldatetime":
-        builder = Timestamp.builder();
-        break;
-      case "time":
-        builder = Time.builder();
-        break;
-      case "int":
-        builder = SchemaBuilder.int32();
-        break;
-      case "smallint":
-        builder = SchemaBuilder.int16();
-        break;
-      case "tinyint":
-        builder = SchemaBuilder.int8();
-        break;
-      case "real":
-        builder = SchemaBuilder.float32();
-        break;
-      case "float":
-        builder = SchemaBuilder.float64();
-        break;
+    case "bigint":
+      builder = SchemaBuilder.int64();
+      break;
+    case "bit":
+      builder = SchemaBuilder.bool();
+      break;
+    case "char":
+    case "varchar":
+    case "text":
+    case "nchar":
+    case "nvarchar":
+    case "ntext":
+    case "uniqueidentifier":
+      builder = SchemaBuilder.string();
+      break;
+    case "smallmoney":
+    case "money":
+    case "decimal":
+    case "numeric":
+      builder = Decimal.builder(scale);
+      break;
+    case "binary":
+    case "image":
+    case "varbinary":
+    case "timestamp":
+      builder = SchemaBuilder.bytes();
+      break;
+    case "date":
+      builder = Date.builder();
+      break;
+    case "datetime":
+    case "datetime2":
+    case "smalldatetime":
+      builder = Timestamp.builder();
+      break;
+    case "datetimeoffset":
+      builder = SchemaBuilder.string();
+      break;
+    case "time":
+      builder = Time.builder();
+      break;
+    case "int":
+      builder = SchemaBuilder.int32();
+      break;
+    case "smallint":
+      builder = SchemaBuilder.int16();
+      break;
+    case "tinyint":
+      builder = SchemaBuilder.int8();
+      break;
+    case "real":
+      builder = SchemaBuilder.float32();
+      break;
+    case "float":
+      builder = SchemaBuilder.float64();
+      break;
 
-      default:
-        throw new DataException(
-            String.format("Could not process (dataType = '%s', optional = %s, scale = %d) for %s.",
-                dataType, optional, scale, changeKey
-            )
-        );
+    default:
+      throw new DataException(String.format("Could not process (dataType = '%s', optional = %s, scale = %d) for %s.",
+          dataType, optional, scale, changeKey));
     }
 
-    log.trace("{}: columnName='{}' schema.type='{}' schema.name='{}'", changeKey, columnName, builder.type(), builder.name());
+    log.trace("{}: columnName='{}' schema.type='{}' schema.name='{}'", changeKey, columnName, builder.type(),
+        builder.name());
 
-    builder.parameters(
-        ImmutableMap.of(Change.ColumnValue.COLUMN_NAME, columnName)
-    );
+    builder.parameters(ImmutableMap.of(Change.ColumnValue.COLUMN_NAME, columnName));
 
     if (optional) {
       builder.optional();
@@ -226,10 +220,8 @@ class MsSqlTableMetadataProvider extends CachingTableMetadataProvider {
         try (ResultSet resultSet = statement.executeQuery()) {
           while (resultSet.next()) {
             final long minValidVersion = resultSet.getLong("min_valid_version");
-            Preconditions.checkState(
-                !resultSet.wasNull(),
-                "resultSet did not returned a null for min_valid_version of %s", changeKey
-            );
+            Preconditions.checkState(!resultSet.wasNull(),
+                "resultSet did not returned a null for min_valid_version of %s", changeKey);
             log.trace("{}: Found min_valid_version of {}.", changeKey, minValidVersion);
 
             offset = MsSqlChange.offset(minValidVersion);
@@ -243,7 +235,6 @@ class MsSqlTableMetadataProvider extends CachingTableMetadataProvider {
     return offset;
   }
 
-
   static class MsSqlTableMetadata implements TableMetadata {
     final String databaseName;
     final String schemaName;
@@ -255,7 +246,8 @@ class MsSqlTableMetadataProvider extends CachingTableMetadataProvider {
       this(changeKey.databaseName, changeKey.schemaName, changeKey.tableName, keyColumns, columnSchemas);
     }
 
-    MsSqlTableMetadata(String databaseName, String schemaName, String tableName, Set<String> keyColumns, Map<String, Schema> columnSchemas) {
+    MsSqlTableMetadata(String databaseName, String schemaName, String tableName, Set<String> keyColumns,
+        Map<String, Schema> columnSchemas) {
       this.databaseName = databaseName;
       this.schemaName = schemaName;
       this.tableName = tableName;
